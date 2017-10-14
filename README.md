@@ -28,6 +28,11 @@ There are a few options to customize the generated thumbnails:
 
 Please note that procedurally generated textures are not automatically garbage collected, so you have to call **Destroy(thumbnailTexture)** or **DestroyImmediate(thumbnailTexture)** after you no longer need a thumbnail. Though, be aware that unused procedural textures do get garbage collected while changing scenes, so even if you don't destroy the thumbnails manually, they won't consume memory forever. But it is always better to destroy the thumbnails manually when you know that you won't be needing them anymore.
 
+Here are two example thumbnails, one with perspective projection and grey background and the other with orthographic projection and transparent background:
+
+![perspective](example1.png)
+![orthographic](example2.png)
+
 **DEBUG_BOUNDS Mode**: the location of the preview render camera is calculated using the Renderer bounds of the target object. If you want, you can uncomment the first line of the *RuntimePreviewGenerator* script to see the corners of the bounds in the thumbnail textures
 
 Well, that's it, I guess. Enjoy!
