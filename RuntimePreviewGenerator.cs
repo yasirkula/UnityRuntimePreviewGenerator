@@ -1,11 +1,11 @@
-﻿//#define DEBUG_BOUNDS
+//#define DEBUG_BOUNDS
 
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
-public static class ModelPreviewGenerator
+public static class RuntimePreviewGenerator
 {
 	// Source: https://github.com/MattRix/UnityDecompiled/blob/master/UnityEngine/UnityEngine/Plane.cs
 	private struct ProjectionPlane
@@ -168,7 +168,7 @@ public static class ModelPreviewGenerator
 		set { m_transparentBackground = value; }
 	}
 	
-	static ModelPreviewGenerator()
+	static RuntimePreviewGenerator()
 	{
 		PreviewRenderCamera = null;
 		PreviewDirection = new Vector3( -1f, -1f, -1f );
@@ -186,7 +186,7 @@ public static class ModelPreviewGenerator
 #endif
 	}
 
-public static Texture2D GenerateMaterialPreview( Material material, PrimitiveType previewObject, int width = 64, int height = 64 )
+	public static Texture2D GenerateMaterialPreview( Material material, PrimitiveType previewObject, int width = 64, int height = 64 )
 	{
 		return GenerateMaterialPreviewWithShader( material, previewObject, null, null, width, height );
 	}
