@@ -35,4 +35,6 @@ Here are two example thumbnails, one with perspective projection and grey backgr
 
 **DEBUG_BOUNDS Mode**: the location of the preview render camera is calculated using the Renderer bounds of the target object. If you want, you can uncomment the first line of the *RuntimePreviewGenerator* script to see the corners of the bounds in the thumbnail textures
 
+**NOTE:** If you receive a `UnityException: Texture '' is not readable, the texture memory can not be accessed from scripts.` error while trying to manipulate the generated textures, change the `result.Apply( false, true );` line as following: `result.Apply( false, false );`
+
 Well, that's it, I guess. Enjoy!
