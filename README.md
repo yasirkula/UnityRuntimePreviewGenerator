@@ -1,4 +1,9 @@
 # Runtime Preview Generator for Unity 3D
+
+**Available on Asset Store:** https://www.assetstore.unity3d.com/en/#!/content/112860
+
+**Forum Thread:** https://forum.unity.com/threads/runtime-preview-thumbnail-generator-open-source.500194/
+
 This script lets you generate thumbnails for your **GameObject's** or **materials** in **Texture2D** format while the game is running. There are 2 main functions:
 
 ```csharp
