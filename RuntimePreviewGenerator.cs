@@ -117,8 +117,6 @@ public static class RuntimePreviewGenerator
 				m_internalCamera.enabled = false;
 				m_internalCamera.nearClipPlane = 0.01f;
                 m_internalCamera.cullingMask = 1 << PREVIEW_LAYER;
-				m_internalCamera.allowHDR = false;
-				m_internalCamera.allowMSAA = false;
 				m_internalCamera.gameObject.hideFlags = HideFlags.HideAndDontSave;
 			}
 
@@ -231,7 +229,7 @@ public static class RuntimePreviewGenerator
 		Transform previewObject;
 		if( shouldCloneModel )
 		{
-			previewObject = Object.Instantiate( model, null, false );
+			previewObject = (Transform) Object.Instantiate( model, null, false );
 			previewObject.gameObject.hideFlags = HideFlags.HideAndDontSave;
 		}
 		else
