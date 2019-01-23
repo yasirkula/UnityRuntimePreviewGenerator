@@ -138,6 +138,22 @@ public static class RuntimePreviewGenerator
 		set { m_previewDirection = value.normalized; }
 	}
 
+	private static Vector3 m_upDirection;
+	public static Vector3 UpDirection
+	{
+		get { return m_upDirection; }
+		set { m_upDirection = value.normalized; }
+	}
+	
+	private static Vector2 m_PanOffset;
+	public static Vector2 PanOffset
+	{
+		get { return m_PanOffset; }
+		set { m_PanOffset = value; }
+	}
+
+	public static float ZoomLevel { get; set; }
+	
 	private static float m_padding;
 	public static float Padding
 	{
@@ -169,7 +185,9 @@ public static class RuntimePreviewGenerator
 	static RuntimePreviewGenerator()
 	{
 		PreviewRenderCamera = null;
-		PreviewDirection = new Vector3( -1f, -1f, -1f );
+		PreviewDirection = new Vector3( -1f, -1f, -1f);
+		UpDirection = new Vector3(0f, 1f, 0f);
+		PanOffset = new Vector3(0f, 0f, 0f);
 		Padding = 0f;
 		BackgroundColor = new Color( 0.3f, 0.3f, 0.3f, 1f );
 		OrthographicMode = false;
@@ -260,7 +278,7 @@ public static class RuntimePreviewGenerator
 				previewObject.gameObject.SetActive( true );
 
 			Vector3 previewDir = previewObject.rotation * m_previewDirection;
-
+			
 			renderersList.Clear();
 			previewObject.GetComponentsInChildren( renderersList );
 			
@@ -289,7 +307,7 @@ public static class RuntimePreviewGenerator
 
 			aspect = (float) width / height;
 			renderCamera.aspect = aspect;
-			renderCamera.transform.rotation = Quaternion.LookRotation( previewDir, previewObject.up );
+			renderCamera.transform.rotation = Quaternion.LookRotation( previewDir, m_upDirection );
 
 #if DEBUG_BOUNDS
 			boundsDebugCubes.Clear();
@@ -321,7 +339,8 @@ public static class RuntimePreviewGenerator
 				ProjectBoundingBoxMinMax( point );
 
 				distance = boundsExtents.magnitude + 1f;
-				renderCamera.orthographicSize = ( 1f + m_padding * 2f ) * Mathf.Max( maxY - minY, ( maxX - minX ) / aspect ) * 0.5f;
+				float zoom = Mathf.Min(.999999f, ZoomLevel);
+				renderCamera.orthographicSize = ( 1f - zoom + m_padding * 2f ) * Mathf.Max( maxY - minY, ( maxX - minX ) / aspect ) * 0.5f;
 			}
 			else
 			{
@@ -347,10 +366,13 @@ public static class RuntimePreviewGenerator
 				point.x += boundsSize.x;
 				CalculateMaxDistance( point );
 
-				distance = ( 1f + m_padding * 2f ) * Mathf.Sqrt( maxDistance );
+				distance = (( 1f + m_padding * 2f ) * Mathf.Sqrt( maxDistance )) - ZoomLevel;
 			}
 
-			renderCamera.transform.position = boundsCenter - previewDir * distance;
+			renderCamera.transform.position = (boundsCenter - previewDir * distance);
+			Vector3 panOffset = new Vector3(-m_PanOffset.x, m_PanOffset.y, 0.0f);
+			renderCamera.transform.Translate(panOffset);
+
 			renderCamera.farClipPlane = distance * 4f;
 
 			RenderTexture temp = RenderTexture.active;
@@ -397,8 +419,8 @@ public static class RuntimePreviewGenerator
 
 				if( !isStatic )
 				{
-					previewObject.position = prevPos;
-					previewObject.rotation = prevRot;
+					//previewObject.position = prevPos;
+					//previewObject.rotation = prevRot;
 				}
 
 				int index = 0;
