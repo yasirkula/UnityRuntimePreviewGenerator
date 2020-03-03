@@ -1,18 +1,20 @@
 # Unity Runtime Preview Generator
 
-**Available on Asset Store:** https://www.assetstore.unity3d.com/en/#!/content/112860
+**Available on Asset Store:** https://assetstore.unity.com/packages/tools/camera/runtime-preview-generator-112860
 
 **Forum Thread:** https://forum.unity.com/threads/runtime-preview-thumbnail-generator-open-source.500194/
 
 This plugin helps you generate preview textures (thumbnails) for your **GameObjects** or **materials** in **Texture2D** format on the fly.
 
 ## FEATURES
+
 - Supports perspective and orthographic projections
 - Supports transparent background
 - Customizable preview direction and background color
 
 ## HOW TO
-Simply import **RuntimePreviewGenerator.unitypackage** to your project and you are good to go!
+
+Simply import [RuntimePreviewGenerator.unitypackage](https://github.com/yasirkula/UnityRuntimePreviewGenerator/releases) to your project and you are good to go!
 
 There are 2 main functions:
 
