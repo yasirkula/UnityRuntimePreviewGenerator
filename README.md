@@ -4,6 +4,8 @@
 
 **Forum Thread:** https://forum.unity.com/threads/runtime-preview-thumbnail-generator-open-source.500194/
 
+**[Support the Developer ☕](https://yasirkula.itch.io/unity3d)**
+
 This plugin helps you generate preview textures (thumbnails) for your **GameObjects** or **materials** in **Texture2D** format on the fly.
 
 ## FEATURES
