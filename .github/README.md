@@ -14,9 +14,17 @@ This plugin helps you generate preview textures (thumbnails) for your **GameObje
 - Supports transparent background
 - Customizable preview direction and background color
 
-## HOW TO
+## INSTALLATION
 
-Simply import [RuntimePreviewGenerator.unitypackage](https://github.com/yasirkula/UnityRuntimePreviewGenerator/releases) to your project and you are good to go!
+There are 4 ways to install this plugin:
+
+- import [RuntimePreviewGenerator.unitypackage](https://github.com/yasirkula/UnityRuntimePreviewGenerator/releases) via *Assets-Import Package*
+- clone/[download](https://github.com/yasirkula/UnityRuntimePreviewGenerator/archive/master.zip) this repository and move the *Plugins* folder to your Unity project's *Assets* folder
+- import it from [Asset Store](https://assetstore.unity.com/packages/tools/camera/runtime-preview-generator-112860)
+- *(via Package Manager)* add the following line to *Packages/manifest.json*:
+  - `"com.yasirkula.runtimepreviewgenerator": "https://github.com/yasirkula/UnityRuntimePreviewGenerator.git",`
+
+## HOW TO
 
 There are 2 main functions:
 

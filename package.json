@@ -1,0 +1,6 @@
+{
+  "name": "com.yasirkula.runtimepreviewgenerator",
+  "displayName": "Runtime Preview Generator",
+  "version": "1.0.0",
+  "description": "This plugin helps you generate preview textures (thumbnails) for your GameObjects or materials in Texture2D format on the fly."
+}

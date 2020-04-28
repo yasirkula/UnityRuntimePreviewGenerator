@@ -218,7 +218,7 @@ public static class RuntimePreviewGenerator
 
 	public static Texture2D GenerateModelPreviewWithShader( Transform model, Shader shader, string replacementTag, int width = 64, int height = 64, bool shouldCloneModel = false )
 	{
-		if( model == null || model.Equals( null ) )
+		if( !model )
 			return null;
 
 		Texture2D result = null;
@@ -414,7 +414,7 @@ public static class RuntimePreviewGenerator
 
 	private static void SetupCamera()
 	{
-		if( m_previewRenderCamera != null && !m_previewRenderCamera.Equals( null ) )
+		if( m_previewRenderCamera )
 		{
 			cameraSetup.GetSetup( m_previewRenderCamera );
 
