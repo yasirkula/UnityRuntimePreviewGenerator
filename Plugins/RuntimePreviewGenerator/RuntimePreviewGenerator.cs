@@ -7,40 +7,10 @@ using Object = UnityEngine.Object;
 
 public static class RuntimePreviewGenerator
 {
-	// Source: https://github.com/MattRix/UnityDecompiled/blob/master/UnityEngine/UnityEngine/Plane.cs
-	private struct ProjectionPlane
-	{
-		private readonly Vector3 m_Normal;
-		private readonly float m_Distance;
-
-		public ProjectionPlane( Vector3 inNormal, Vector3 inPoint )
-		{
-			m_Normal = Vector3.Normalize( inNormal );
-			m_Distance = -Vector3.Dot( inNormal, inPoint );
-		}
-
-		public Vector3 ClosestPointOnPlane( Vector3 point )
-		{
-			float d = Vector3.Dot( m_Normal, point ) + m_Distance;
-			return point - m_Normal * d;
-		}
-
-		public float GetDistanceToPoint( Vector3 point )
-		{
-			float signedDistance = Vector3.Dot( m_Normal, point ) + m_Distance;
-			if( signedDistance < 0f )
-				signedDistance = -signedDistance;
-
-			return signedDistance;
-		}
-	}
-
 	private class CameraSetup
 	{
 		private Vector3 position;
 		private Quaternion rotation;
-
-		private RenderTexture targetTexture;
 
 		private Color backgroundColor;
 		private bool orthographic;
@@ -48,14 +18,15 @@ public static class RuntimePreviewGenerator
 		private float nearClipPlane;
 		private float farClipPlane;
 		private float aspect;
+		private int cullingMask;
 		private CameraClearFlags clearFlags;
+
+		private RenderTexture targetTexture;
 
 		public void GetSetup( Camera camera )
 		{
 			position = camera.transform.position;
 			rotation = camera.transform.rotation;
-
-			targetTexture = camera.targetTexture;
 
 			backgroundColor = camera.backgroundColor;
 			orthographic = camera.orthographic;
@@ -63,7 +34,10 @@ public static class RuntimePreviewGenerator
 			nearClipPlane = camera.nearClipPlane;
 			farClipPlane = camera.farClipPlane;
 			aspect = camera.aspect;
+			cullingMask = camera.cullingMask;
 			clearFlags = camera.clearFlags;
+
+			targetTexture = camera.targetTexture;
 		}
 
 		public void ApplySetup( Camera camera )
@@ -71,39 +45,43 @@ public static class RuntimePreviewGenerator
 			camera.transform.position = position;
 			camera.transform.rotation = rotation;
 
-			camera.targetTexture = targetTexture;
-
 			camera.backgroundColor = backgroundColor;
 			camera.orthographic = orthographic;
 			camera.orthographicSize = orthographicSize;
-			camera.nearClipPlane = nearClipPlane;
-			camera.farClipPlane = farClipPlane;
 			camera.aspect = aspect;
+			camera.cullingMask = cullingMask;
 			camera.clearFlags = clearFlags;
 
+			// Assigning order or nearClipPlane and farClipPlane may matter because Unity clamps near to far and far to near
+			if( nearClipPlane < camera.farClipPlane )
+			{
+				camera.nearClipPlane = nearClipPlane;
+				camera.farClipPlane = farClipPlane;
+			}
+			else
+			{
+				camera.farClipPlane = farClipPlane;
+				camera.nearClipPlane = nearClipPlane;
+			}
+
+			camera.targetTexture = targetTexture;
 			targetTexture = null;
 		}
 	}
 
 	private const int PREVIEW_LAYER = 22;
-	private static Vector3 PREVIEW_POSITION = new Vector3( -9245f, 9899f, -9356f );
+	private static Vector3 PREVIEW_POSITION = new Vector3( -250f, -250f, -250f );
 
 	private static Camera renderCamera;
-	private static CameraSetup cameraSetup = new CameraSetup();
+	private static readonly CameraSetup cameraSetup = new CameraSetup();
 
-	private static List<Renderer> renderersList = new List<Renderer>( 64 );
-	private static List<int> layersList = new List<int>( 64 );
+	private static readonly Vector3[] boundingBoxPoints = new Vector3[8];
 
-	private static float aspect;
-	private static float minX, maxX, minY, maxY;
-	private static float maxDistance;
-
-	private static Vector3 boundsCenter;
-	private static ProjectionPlane projectionPlaneHorizontal, projectionPlaneVertical;
+	private static readonly List<Renderer> renderersList = new List<Renderer>( 64 );
+	private static readonly List<int> layersList = new List<int>( 64 );
 
 #if DEBUG_BOUNDS
-	private static List<Transform> boundsDebugCubes = new List<Transform>( 8 );
-	private static Material boundsMaterial;
+	private static Material boundsDebugMaterial;
 #endif
 
 	private static Camera m_internalCamera = null;
@@ -131,7 +109,7 @@ public static class RuntimePreviewGenerator
 		set { m_previewRenderCamera = value; }
 	}
 
-	private static Vector3 m_previewDirection;
+	private static Vector3 m_previewDirection = new Vector3( -0.57735f, -0.57735f, -0.57735f ); // Normalized (-1,-1,-1)
 	public static Vector3 PreviewDirection
 	{
 		get { return m_previewDirection; }
@@ -145,44 +123,33 @@ public static class RuntimePreviewGenerator
 		set { m_padding = Mathf.Clamp( value, -0.25f, 0.25f ); }
 	}
 
-	private static Color m_backgroundColor;
+	private static Color m_backgroundColor = new Color( 0.3f, 0.3f, 0.3f, 1f );
 	public static Color BackgroundColor
 	{
 		get { return m_backgroundColor; }
 		set { m_backgroundColor = value; }
 	}
 
-	private static bool m_orthographicMode;
+	private static bool m_orthographicMode = false;
 	public static bool OrthographicMode
 	{
 		get { return m_orthographicMode; }
 		set { m_orthographicMode = value; }
 	}
 
-	private static bool m_markTextureNonReadable;
+	private static bool m_markTextureNonReadable = true;
 	public static bool MarkTextureNonReadable
 	{
 		get { return m_markTextureNonReadable; }
 		set { m_markTextureNonReadable = value; }
 	}
 
-	static RuntimePreviewGenerator()
-	{
-		PreviewRenderCamera = null;
-		PreviewDirection = new Vector3( -1f, -1f, -1f );
-		Padding = 0f;
-		BackgroundColor = new Color( 0.3f, 0.3f, 0.3f, 1f );
-		OrthographicMode = false;
-		MarkTextureNonReadable = true;
-
-#if DEBUG_BOUNDS
-		boundsMaterial = new Material( Shader.Find( "Legacy Shaders/Diffuse" ) )
-		{
-			hideFlags = HideFlags.HideAndDontSave,
-			color = new Color( 0f, 1f, 1f, 1f )
-		};
-#endif
-	}
+	//private static int m_perspectiveFittingIterations = 2;
+	//public static int PerspectiveFittingIterations
+	//{
+	//	get { return m_perspectiveFittingIterations; }
+	//	set { m_perspectiveFittingIterations = value; }
+	//}
 
 	public static Texture2D GenerateMaterialPreview( Material material, PrimitiveType previewObject, int width = 64, int height = 64 )
 	{
@@ -245,6 +212,10 @@ public static class RuntimePreviewGenerator
 		Vector3 prevPos = previewObject.position;
 		Quaternion prevRot = previewObject.rotation;
 
+#if DEBUG_BOUNDS
+		Transform boundsDebugCube = null;
+#endif
+
 		try
 		{
 			SetupCamera();
@@ -259,121 +230,65 @@ public static class RuntimePreviewGenerator
 			if( !wasActive )
 				previewObject.gameObject.SetActive( true );
 
-			Vector3 previewDir = previewObject.rotation * m_previewDirection;
-
-			renderersList.Clear();
-			previewObject.GetComponentsInChildren( renderersList );
-
 			Bounds previewBounds = new Bounds();
-			bool init = false;
-			for( int i = 0; i < renderersList.Count; i++ )
-			{
-				if( !renderersList[i].enabled )
-					continue;
-
-				if( !init )
-				{
-					previewBounds = renderersList[i].bounds;
-					init = true;
-				}
-				else
-					previewBounds.Encapsulate( renderersList[i].bounds );
-			}
-
-			if( !init )
+			if( !CalculateBounds( previewObject, out previewBounds ) )
 				return null;
 
-			boundsCenter = previewBounds.center;
-			Vector3 boundsExtents = previewBounds.extents;
-			Vector3 boundsSize = 2f * boundsExtents;
-
-			aspect = (float) width / height;
-			renderCamera.aspect = aspect;
-			renderCamera.transform.rotation = Quaternion.LookRotation( previewDir, previewObject.up );
-
 #if DEBUG_BOUNDS
-			boundsDebugCubes.Clear();
+			if( !boundsDebugMaterial )
+			{
+				boundsDebugMaterial = new Material( Shader.Find( "Sprites/Default" ) )
+				{
+					hideFlags = HideFlags.HideAndDontSave,
+					color = new Color( 0.5f, 0.5f, 0.5f, 0.5f )
+				};
+			}
+
+			boundsDebugCube = GameObject.CreatePrimitive( PrimitiveType.Cube ).transform;
+			boundsDebugCube.localPosition = previewBounds.center;
+			boundsDebugCube.localScale = previewBounds.size;
+			boundsDebugCube.gameObject.layer = PREVIEW_LAYER;
+			boundsDebugCube.gameObject.hideFlags = HideFlags.HideAndDontSave;
+
+			boundsDebugCube.GetComponent<Renderer>().sharedMaterial = boundsDebugMaterial;
 #endif
 
-			float distance;
-			if( m_orthographicMode )
+			renderCamera.aspect = (float) width / height;
+			renderCamera.transform.rotation = Quaternion.LookRotation( previewObject.rotation * m_previewDirection, previewObject.up );
+
+			CalculateCameraPosition( renderCamera, previewBounds, m_padding );
+
+			renderCamera.farClipPlane = ( renderCamera.transform.position - previewBounds.center ).magnitude + previewBounds.size.magnitude;
+
+			RenderTexture activeRT = RenderTexture.active;
+			RenderTexture renderTexture = null;
+			try
 			{
-				renderCamera.transform.position = boundsCenter;
+				renderTexture = RenderTexture.GetTemporary( width, height, 16 );
+				RenderTexture.active = renderTexture;
+				if( m_backgroundColor.a < 1f )
+					GL.Clear( true, true, m_backgroundColor );
 
-				minX = minY = Mathf.Infinity;
-				maxX = maxY = Mathf.NegativeInfinity;
+				renderCamera.targetTexture = renderTexture;
 
-				Vector3 point = boundsCenter + boundsExtents;
-				ProjectBoundingBoxMinMax( point );
-				point.x -= boundsSize.x;
-				ProjectBoundingBoxMinMax( point );
-				point.y -= boundsSize.y;
-				ProjectBoundingBoxMinMax( point );
-				point.x += boundsSize.x;
-				ProjectBoundingBoxMinMax( point );
-				point.z -= boundsSize.z;
-				ProjectBoundingBoxMinMax( point );
-				point.x -= boundsSize.x;
-				ProjectBoundingBoxMinMax( point );
-				point.y += boundsSize.y;
-				ProjectBoundingBoxMinMax( point );
-				point.x += boundsSize.x;
-				ProjectBoundingBoxMinMax( point );
+				if( !shader )
+					renderCamera.Render();
+				else
+					renderCamera.RenderWithShader( shader, replacementTag ?? string.Empty );
 
-				distance = boundsExtents.magnitude + 1f;
-				renderCamera.orthographicSize = ( 1f + m_padding * 2f ) * Mathf.Max( maxY - minY, ( maxX - minX ) / aspect ) * 0.5f;
+				renderCamera.targetTexture = null;
+
+				result = new Texture2D( width, height, m_backgroundColor.a < 1f ? TextureFormat.RGBA32 : TextureFormat.RGB24, false );
+				result.ReadPixels( new Rect( 0f, 0f, width, height ), 0, 0, false );
+				result.Apply( false, m_markTextureNonReadable );
 			}
-			else
+			finally
 			{
-				projectionPlaneHorizontal = new ProjectionPlane( renderCamera.transform.up, boundsCenter );
-				projectionPlaneVertical = new ProjectionPlane( renderCamera.transform.right, boundsCenter );
+				RenderTexture.active = activeRT;
 
-				maxDistance = Mathf.NegativeInfinity;
-
-				Vector3 point = boundsCenter + boundsExtents;
-				CalculateMaxDistance( point );
-				point.x -= boundsSize.x;
-				CalculateMaxDistance( point );
-				point.y -= boundsSize.y;
-				CalculateMaxDistance( point );
-				point.x += boundsSize.x;
-				CalculateMaxDistance( point );
-				point.z -= boundsSize.z;
-				CalculateMaxDistance( point );
-				point.x -= boundsSize.x;
-				CalculateMaxDistance( point );
-				point.y += boundsSize.y;
-				CalculateMaxDistance( point );
-				point.x += boundsSize.x;
-				CalculateMaxDistance( point );
-
-				distance = ( 1f + m_padding * 2f ) * Mathf.Sqrt( maxDistance );
+				if( renderTexture )
+					RenderTexture.ReleaseTemporary( renderTexture );
 			}
-
-			renderCamera.transform.position = boundsCenter - previewDir * distance;
-			renderCamera.farClipPlane = distance * 4f;
-
-			RenderTexture temp = RenderTexture.active;
-			RenderTexture renderTex = RenderTexture.GetTemporary( width, height, 16 );
-			RenderTexture.active = renderTex;
-			if( m_backgroundColor.a < 1f )
-				GL.Clear( false, true, m_backgroundColor );
-
-			renderCamera.targetTexture = renderTex;
-
-			if( shader == null )
-				renderCamera.Render();
-			else
-				renderCamera.RenderWithShader( shader, replacementTag == null ? string.Empty : replacementTag );
-
-			renderCamera.targetTexture = null;
-
-			result = new Texture2D( width, height, m_backgroundColor.a < 1f ? TextureFormat.RGBA32 : TextureFormat.RGB24, false );
-			result.ReadPixels( new Rect( 0, 0, width, height ), 0, 0, false );
-			result.Apply( false, m_markTextureNonReadable );
-
-			RenderTexture.active = temp;
-			RenderTexture.ReleaseTemporary( renderTex );
 		}
 		catch( Exception e )
 		{
@@ -382,10 +297,8 @@ public static class RuntimePreviewGenerator
 		finally
 		{
 #if DEBUG_BOUNDS
-			for( int i = 0; i < boundsDebugCubes.Count; i++ )
-				Object.DestroyImmediate( boundsDebugCubes[i].gameObject );
-
-			boundsDebugCubes.Clear();
+			if( boundsDebugCube )
+				Object.DestroyImmediate( boundsDebugCube.gameObject );
 #endif
 
 			if( shouldCloneModel )
@@ -412,6 +325,314 @@ public static class RuntimePreviewGenerator
 		return result;
 	}
 
+	// Calculates AABB bounds of the target object (AABB will include its child objects)
+	public static bool CalculateBounds( Transform target, out Bounds bounds )
+	{
+		renderersList.Clear();
+		target.GetComponentsInChildren( renderersList );
+
+		bounds = new Bounds();
+		bool hasBounds = false;
+		for( int i = 0; i < renderersList.Count; i++ )
+		{
+			if( !renderersList[i].enabled )
+				continue;
+
+			if( !hasBounds )
+			{
+				bounds = renderersList[i].bounds;
+				hasBounds = true;
+			}
+			else
+				bounds.Encapsulate( renderersList[i].bounds );
+		}
+
+		return hasBounds;
+	}
+
+	// Moves camera in a way such that it will encapsulate bounds perfectly
+	public static void CalculateCameraPosition( Camera camera, Bounds bounds, float padding = 0f )
+	{
+		Transform cameraTR = camera.transform;
+
+		Vector3 cameraDirection = cameraTR.forward;
+		float aspect = camera.aspect;
+
+		if( padding != 0f )
+			bounds.size *= 1f + padding * 2f; // Padding applied to both edges, hence multiplied by 2
+
+		Vector3 boundsCenter = bounds.center;
+		Vector3 boundsExtents = bounds.extents;
+		Vector3 boundsSize = 2f * boundsExtents;
+
+		// Calculate corner points of the Bounds
+		Vector3 point = boundsCenter + boundsExtents;
+		boundingBoxPoints[0] = point;
+		point.x -= boundsSize.x;
+		boundingBoxPoints[1] = point;
+		point.y -= boundsSize.y;
+		boundingBoxPoints[2] = point;
+		point.x += boundsSize.x;
+		boundingBoxPoints[3] = point;
+		point.z -= boundsSize.z;
+		boundingBoxPoints[4] = point;
+		point.x -= boundsSize.x;
+		boundingBoxPoints[5] = point;
+		point.y += boundsSize.y;
+		boundingBoxPoints[6] = point;
+		point.x += boundsSize.x;
+		boundingBoxPoints[7] = point;
+
+		if( camera.orthographic )
+		{
+			cameraTR.position = boundsCenter;
+
+			float minX = float.PositiveInfinity, minY = float.PositiveInfinity;
+			float maxX = float.NegativeInfinity, maxY = float.NegativeInfinity;
+
+			for( int i = 0; i < boundingBoxPoints.Length; i++ )
+			{
+				Vector3 localPoint = cameraTR.InverseTransformPoint( boundingBoxPoints[i] );
+				if( localPoint.x < minX )
+					minX = localPoint.x;
+				if( localPoint.x > maxX )
+					maxX = localPoint.x;
+				if( localPoint.y < minY )
+					minY = localPoint.y;
+				if( localPoint.y > maxY )
+					maxY = localPoint.y;
+			}
+
+			float distance = boundsExtents.magnitude + 1f;
+			camera.orthographicSize = Mathf.Max( maxY - minY, ( maxX - minX ) / aspect ) * 0.5f;
+			cameraTR.position = boundsCenter - cameraDirection * distance;
+		}
+		else
+		{
+			Vector3 cameraUp = cameraTR.up, cameraRight = cameraTR.right;
+
+			float verticalFOV = camera.fieldOfView * 0.5f;
+			float horizontalFOV = Mathf.Atan( Mathf.Tan( verticalFOV * Mathf.Deg2Rad ) * aspect ) * Mathf.Rad2Deg;
+
+			// Normals of the camera's frustum planes
+			Vector3 topFrustumPlaneNormal = Quaternion.AngleAxis( 90f + verticalFOV, -cameraRight ) * cameraDirection;
+			Vector3 bottomFrustumPlaneNormal = Quaternion.AngleAxis( 90f + verticalFOV, cameraRight ) * cameraDirection;
+			Vector3 rightFrustumPlaneNormal = Quaternion.AngleAxis( 90f + horizontalFOV, cameraUp ) * cameraDirection;
+			Vector3 leftFrustumPlaneNormal = Quaternion.AngleAxis( 90f + horizontalFOV, -cameraUp ) * cameraDirection;
+
+			// Credit for algorithm: https://stackoverflow.com/a/66113254/2373034
+			// 1. Find edge points of the bounds using the camera's frustum planes
+			// 2. Create a plane for each edge point that goes through the point and has the corresponding frustum plane's normal
+			// 3. Find the intersection line of horizontal edge points' planes (horizontalIntersection) and vertical edge points' planes (verticalIntersection)
+			//    If we move the camera along horizontalIntersection, the bounds will always with the camera's width perfectly (similar effect goes for verticalIntersection)
+			// 4. Find the closest line segment between these two lines (horizontalIntersection and verticalIntersection) and place the camera at the farthest point on that line
+			int leftmostPoint = -1, rightmostPoint = -1, topmostPoint = -1, bottommostPoint = -1;
+			for( int i = 0; i < boundingBoxPoints.Length; i++ )
+			{
+				if( leftmostPoint < 0 && IsOutermostPointInDirection( i, leftFrustumPlaneNormal ) )
+					leftmostPoint = i;
+				if( rightmostPoint < 0 && IsOutermostPointInDirection( i, rightFrustumPlaneNormal ) )
+					rightmostPoint = i;
+				if( topmostPoint < 0 && IsOutermostPointInDirection( i, topFrustumPlaneNormal ) )
+					topmostPoint = i;
+				if( bottommostPoint < 0 && IsOutermostPointInDirection( i, bottomFrustumPlaneNormal ) )
+					bottommostPoint = i;
+			}
+
+			Ray horizontalIntersection = GetPlanesIntersection( new Plane( leftFrustumPlaneNormal, boundingBoxPoints[leftmostPoint] ), new Plane( rightFrustumPlaneNormal, boundingBoxPoints[rightmostPoint] ) );
+			Ray verticalIntersection = GetPlanesIntersection( new Plane( topFrustumPlaneNormal, boundingBoxPoints[topmostPoint] ), new Plane( bottomFrustumPlaneNormal, boundingBoxPoints[bottommostPoint] ) );
+
+			Vector3 closestPoint1, closestPoint2;
+			FindClosestPointsOnTwoLines( horizontalIntersection, verticalIntersection, out closestPoint1, out closestPoint2 );
+
+			//Debug.DrawRay( boundingBoxPoints[leftmostPoint], leftFrustumPlaneNormal, Color.yellow );
+			//Debug.DrawRay( boundingBoxPoints[rightmostPoint], rightFrustumPlaneNormal, Color.yellow );
+			//Debug.DrawRay( boundingBoxPoints[topmostPoint], topFrustumPlaneNormal, Color.yellow );
+			//Debug.DrawRay( boundingBoxPoints[bottommostPoint], bottomFrustumPlaneNormal, Color.yellow );
+
+			//Debug.DrawRay( horizontalIntersection.origin - horizontalIntersection.direction * 500f, horizontalIntersection.direction * 1000, Color.green );
+			//Debug.DrawRay( verticalIntersection.origin - verticalIntersection.direction * 500f, verticalIntersection.direction * 1000, Color.red );
+
+			//Debug.DrawLine( closestPoint1, closestPoint2, Color.blue );
+
+			cameraTR.position = Vector3.Dot( closestPoint1 - closestPoint2, cameraDirection ) < 0 ? closestPoint1 : closestPoint2;
+
+			/* // Iterative approach, not needed since the current solution always finds the perfect camera position in a single shot
+			float distance = 0f;
+			if( m_perspectiveFittingIterations <= 0 ) // No iterations but somewhat erratic behaviour
+			{
+				cameraTR.position = boundsCenter;
+				Plane projectionPlane = new Plane( cameraTR.forward, boundsCenter );
+
+				distance = float.NegativeInfinity;
+
+				float _1OverAspect = 1f / aspect;
+				float frustumDistanceCoefficient = 1f / Mathf.Tan( camera.fieldOfView * 0.5f * Mathf.Deg2Rad );
+				for( int i = 0; i < boundingBoxPoints.Length; i++ )
+				{
+#if UNITY_2017_1_OR_NEWER
+					Vector3 localPoint = cameraTR.InverseTransformPoint( projectionPlane.ClosestPointOnPlane( boundingBoxPoints[i] ) );
+#else // ClosestPointOnPlane doesn't exist on older Unity versions
+					Vector3 localPoint = cameraTR.InverseTransformPoint( boundingBoxPoints[i] - projectionPlane.normal * ( Vector3.Dot( projectionPlane.normal, boundingBoxPoints[i] ) + projectionPlane.distance ) );
+#endif
+
+					// Credit: https://docs.unity3d.com/Manual/FrustumSizeAtDistance.html
+					float halfFrustumHeight = Mathf.Max( localPoint.y, localPoint.x * _1OverAspect );
+					float _distance = halfFrustumHeight * frustumDistanceCoefficient;
+
+					if( _distance > distance )
+						distance = _distance;
+				}
+
+				distance *= 1f + padding * 2f;
+			}
+			else
+			{
+				float boundsLength = bounds.size.magnitude;
+				float screenWidth = Screen.width, screenHeight = Screen.height;
+				float verticalFrustumPlaneDot = 1f / Mathf.Sqrt( 1f + aspect * aspect );
+
+				float prevIterationDistance = boundsLength * 60f / Mathf.Min( 90f, camera.fieldOfView ); // These are magic numbers that worked the best in my trials
+				for( int i = 0; i < m_perspectiveFittingIterations; i++ )
+				{
+					// Calculate normalized free spaces at the edges of the screen to shift the camera in those directions
+					cameraTR.position = boundsCenter - cameraDirection * prevIterationDistance;
+
+					float minX = float.PositiveInfinity, minY = float.PositiveInfinity;
+					float maxX = float.NegativeInfinity, maxY = float.NegativeInfinity;
+					Vector3 minXWorld = Vector3.zero, minYWorld = Vector3.zero;
+					Vector3 maxXWorld = Vector3.zero, maxYWorld = Vector3.zero;
+					for( int j = 0; j < boundingBoxPoints.Length; j++ )
+					{
+						point = boundingBoxPoints[j];
+						Vector3 screenPos = camera.WorldToScreenPoint( point );
+
+						if( screenPos.x < minX )
+						{
+							minX = screenPos.x;
+							minXWorld = point;
+						}
+						if( screenPos.y < minY )
+						{
+							minY = screenPos.y;
+							minYWorld = point;
+						}
+						if( screenPos.x > maxX )
+						{
+							maxX = screenPos.x;
+							maxXWorld = point;
+						}
+						if( screenPos.y > maxY )
+						{
+							maxY = screenPos.y;
+							maxYWorld = point;
+						}
+					}
+
+					float horizontalScreenOffset = ( screenWidth - maxX - minX ) / screenWidth;
+					float verticalScreenOffset = ( screenHeight - maxY - minY ) / screenHeight;
+
+					Vector3 horizontalProjectedBounds = Vector3.Project( maxXWorld - minXWorld, cameraRight );
+					Vector3 verticalProjectedBounds = Vector3.Project( maxYWorld - minYWorld, cameraUp );
+
+					boundsCenter += horizontalProjectedBounds * horizontalScreenOffset * -0.5f;
+					boundsCenter += verticalProjectedBounds * verticalScreenOffset * -0.5f;
+
+					// This sometimes yields better results for iteration=1 but sometimes worse. And it doesn't converge to best result
+					// as fast as current method while increasing iterations
+					//boundsCenter += ( cameraRight * horizontalScreenOffset + cameraUp * verticalScreenOffset ) * ( boundsLength * -0.25f );
+
+					Ray cameraRay = new Ray( boundsCenter - cameraDirection * boundsLength * 2f, cameraDirection );
+					float maxDistance = float.NegativeInfinity;
+					for( int j = 0; j < boundingBoxPoints.Length; j++ )
+					{
+						point = boundingBoxPoints[j];
+
+						// Calculate closest point on line that goes through boundsCenter in the direction of cameraDirection
+						float distanceToNearestPointOnLine = Vector3.Dot( point - boundsCenter, cameraDirection );
+						Vector3 nearestPointOnLine = boundsCenter + cameraDirection * distanceToNearestPointOnLine;
+
+						// Find the frustum plane that the point would lie on if we were to translate the camera at boundsCenter in cameraDirection
+						Vector3 direction = point - nearestPointOnLine;
+						float dot = Vector3.Dot( cameraUp, direction.normalized );
+
+						Plane frustumPlane;
+						if( dot >= verticalFrustumPlaneDot )
+							frustumPlane = new Plane( topFrustumPlaneNormal, point );
+						else if( dot <= -verticalFrustumPlaneDot )
+							frustumPlane = new Plane( bottomFrustumPlaneNormal, point );
+						else if( Vector3.Dot( direction, cameraRight ) > 0f )
+							frustumPlane = new Plane( rightFrustumPlaneNormal, point );
+						else
+							frustumPlane = new Plane( leftFrustumPlaneNormal, point );
+
+						// The point of intersection of the frustumPlane and the cameraRay yields the closest point to boundsCenter that
+						// the camera has to be positioned to encapsulate the point inside the frustum
+						float enter;
+						frustumPlane.Raycast( cameraRay, out enter );
+
+						float _distance = ( cameraRay.GetPoint( enter ) - boundsCenter ).sqrMagnitude;
+						if( _distance > maxDistance )
+							maxDistance = _distance;
+					}
+
+					distance = ( 1f + padding * 2f ) * Mathf.Sqrt( maxDistance );
+					prevIterationDistance = distance;
+				}
+			}
+
+			cameraTR.position = boundsCenter - cameraDirection * distance;
+			*/
+		}
+	}
+
+	// Returns whether or not the given point is the outermost point in the given direction among all points of the bounds
+	private static bool IsOutermostPointInDirection( int pointIndex, Vector3 direction )
+	{
+		Vector3 point = boundingBoxPoints[pointIndex];
+		for( int i = 0; i < boundingBoxPoints.Length; i++ )
+		{
+			if( i != pointIndex && Vector3.Dot( direction, boundingBoxPoints[i] - point ) > 0 )
+				return false;
+		}
+
+		return true;
+	}
+
+	// Credit: https://stackoverflow.com/a/32410473/2373034
+	// Returns the intersection line of the 2 planes
+	private static Ray GetPlanesIntersection( Plane p1, Plane p2 )
+	{
+		Vector3 p3Normal = Vector3.Cross( p1.normal, p2.normal );
+		float det = p3Normal.sqrMagnitude;
+
+		return new Ray( ( ( Vector3.Cross( p3Normal, p2.normal ) * p1.distance ) + ( Vector3.Cross( p1.normal, p3Normal ) * p2.distance ) ) / det, p3Normal );
+	}
+
+	// Credit: http://wiki.unity3d.com/index.php/3d_Math_functions
+	// Returns the edge points of the closest line segment between 2 lines
+	private static void FindClosestPointsOnTwoLines( Ray line1, Ray line2, out Vector3 closestPointLine1, out Vector3 closestPointLine2 )
+	{
+		Vector3 line1Direction = line1.direction;
+		Vector3 line2Direction = line2.direction;
+
+		float a = Vector3.Dot( line1Direction, line1Direction );
+		float b = Vector3.Dot( line1Direction, line2Direction );
+		float e = Vector3.Dot( line2Direction, line2Direction );
+
+		float d = a * e - b * b;
+
+		Vector3 r = line1.origin - line2.origin;
+		float c = Vector3.Dot( line1Direction, r );
+		float f = Vector3.Dot( line2Direction, r );
+
+		float s = ( b * f - c * e ) / d;
+		float t = ( a * f - c * b ) / d;
+
+		closestPointLine1 = line1.origin + line1Direction * s;
+		closestPointLine2 = line2.origin + line2Direction * t;
+	}
+
 	private static void SetupCamera()
 	{
 		if( m_previewRenderCamera )
@@ -420,6 +641,7 @@ public static class RuntimePreviewGenerator
 
 			renderCamera = m_previewRenderCamera;
 			renderCamera.nearClipPlane = 0.01f;
+			renderCamera.cullingMask = PREVIEW_LAYER;
 		}
 		else
 			renderCamera = InternalCamera;
@@ -427,43 +649,6 @@ public static class RuntimePreviewGenerator
 		renderCamera.backgroundColor = m_backgroundColor;
 		renderCamera.orthographic = m_orthographicMode;
 		renderCamera.clearFlags = m_backgroundColor.a < 1f ? CameraClearFlags.Depth : CameraClearFlags.Color;
-	}
-
-	private static void ProjectBoundingBoxMinMax( Vector3 point )
-	{
-#if DEBUG_BOUNDS
-		CreateDebugCube( point, Vector3.zero, new Vector3( 0.5f, 0.5f, 0.5f ) );
-#endif
-
-		Vector3 localPoint = renderCamera.transform.InverseTransformPoint( point );
-		if( localPoint.x < minX )
-			minX = localPoint.x;
-		if( localPoint.x > maxX )
-			maxX = localPoint.x;
-		if( localPoint.y < minY )
-			minY = localPoint.y;
-		if( localPoint.y > maxY )
-			maxY = localPoint.y;
-	}
-
-	private static void CalculateMaxDistance( Vector3 point )
-	{
-#if DEBUG_BOUNDS
-		CreateDebugCube( point, Vector3.zero, new Vector3( 0.5f, 0.5f, 0.5f ) );
-#endif
-
-		Vector3 intersectionPoint = projectionPlaneHorizontal.ClosestPointOnPlane( point );
-
-		float horizontalDistance = projectionPlaneHorizontal.GetDistanceToPoint( point );
-		float verticalDistance = projectionPlaneVertical.GetDistanceToPoint( point );
-
-		// Credit: https://docs.unity3d.com/Manual/FrustumSizeAtDistance.html
-		float halfFrustumHeight = Mathf.Max( verticalDistance, horizontalDistance / aspect );
-		float distance = halfFrustumHeight / Mathf.Tan( renderCamera.fieldOfView * 0.5f * Mathf.Deg2Rad );
-
-		float distanceToCenter = ( intersectionPoint - m_previewDirection * distance - boundsCenter ).sqrMagnitude;
-		if( distanceToCenter > maxDistance )
-			maxDistance = distanceToCenter;
 	}
 
 	private static bool IsStatic( Transform obj )
@@ -500,20 +685,4 @@ public static class RuntimePreviewGenerator
 		for( int i = 0; i < obj.childCount; i++ )
 			SetLayerRecursively( obj.GetChild( i ), ref index );
 	}
-
-#if DEBUG_BOUNDS
-	private static void CreateDebugCube( Vector3 position, Vector3 rotation, Vector3 scale )
-	{
-		Transform cube = GameObject.CreatePrimitive( PrimitiveType.Cube ).transform;
-		cube.localPosition = position;
-		cube.localEulerAngles = rotation;
-		cube.localScale = scale;
-		cube.gameObject.layer = PREVIEW_LAYER;
-		cube.gameObject.hideFlags = HideFlags.HideAndDontSave;
-
-		cube.GetComponent<Renderer>().sharedMaterial = boundsMaterial;
-
-		boundsDebugCubes.Add( cube );
-	}
-#endif
 }
