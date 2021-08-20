@@ -39,7 +39,7 @@ public static Texture2D GenerateModelPreview( Transform model, int width = 64, i
 
 The **width** and **height** parameters define the size of the thumbnail texture. To guarantee a clear shot from the model in *GenerateModelPreview* function, the model is moved far away from the origin of the world (if it is not static) and then returned to its original position after the thumbnail is generated (this effect won't be visible to any scene cameras). If **shouldCloneModel** parameter in *GenerateModelPreview* function is set to *true*, the model is instantiated (cloned) and the clone is used to create the thumbnail texture. This parameter is automatically set to *true* for prefabs. Unless you absolutely do not want your scene object to be moved, keep it as *false* for increased performance.
 
-There are also 2 variants for these functions that use **replacement shaders** while rendering the thumbnails (see: https://docs.unity3d.com/Manual/SL-ShaderReplacement.html). These functions are:
+There are also 2 variants for these functions that use **replacement shaders** while rendering the thumbnails (see: https://docs.unity3d.com/Manual/SL-ShaderReplacement.html) (URP and HDRP aren't supported). These functions are:
 
 ```csharp
 public static Texture2D GenerateMaterialPreviewWithShader( Material material, PrimitiveType previewPrimitive, Shader shader, string replacementTag, int width = 64, int height = 64 );
