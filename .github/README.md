@@ -30,11 +30,15 @@ There are 5 ways to install this plugin:
 
 ## HOW TO
 
-There are 2 main functions:
+There are 2 main functions and on Unity 2018.2 or newer, their async variants:
 
 ```csharp
-public static Texture2D GenerateMaterialPreview( Material material, PrimitiveType previewObject, int width = 64, int height = 64 );
+public static Texture2D GenerateMaterialPreview( Material material, PrimitiveType previewPrimitive, int width = 64, int height = 64 );
 public static Texture2D GenerateModelPreview( Transform model, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true );
+
+// !!! Async versions use AsyncGPUReadback.Request so they won't work on all platforms or Graphics APIs !!!
+public static void GenerateMaterialPreviewAsync( Action<Texture2D> callback, Material material, PrimitiveType previewPrimitive, int width = 64, int height = 64 );
+public static void GenerateModelPreviewAsync( Action<Texture2D> callback, Transform model, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true );
 ```
 
 **RuntimePreviewGenerator.GenerateMaterialPreview** function generates thumbnail for a *material* using a primitive object whereas **RuntimePreviewGenerator.GenerateModelPreview** function generates thumbnail for a *GameObject* (can be either a prefab or a scene object).
@@ -50,6 +54,10 @@ There are also 2 variants for these functions that use **replacement shaders** w
 ```csharp
 public static Texture2D GenerateMaterialPreviewWithShader( Material material, PrimitiveType previewPrimitive, Shader shader, string replacementTag, int width = 64, int height = 64 );
 public static Texture2D GenerateModelPreviewWithShader( Transform model, Shader shader, string replacementTag, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true );
+
+// !!! Async versions use AsyncGPUReadback.Request so they won't work on all platforms or Graphics APIs !!!
+public static void GenerateMaterialPreviewWithShaderAsync( Action<Texture2D> callback, Material material, PrimitiveType previewPrimitive, Shader shader, string replacementTag, int width = 64, int height = 64 );
+public static void GenerateModelPreviewWithShaderAsync( Action<Texture2D> callback, Transform model, Shader shader, string replacementTag, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true );
 ```
 
 There are a few options to customize the generated thumbnails:

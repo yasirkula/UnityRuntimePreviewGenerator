@@ -3,6 +3,9 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_2018_2_OR_NEWER
+using UnityEngine.Rendering;
+#endif
 using Object = UnityEngine.Object;
 
 public static class RuntimePreviewGenerator
@@ -151,12 +154,33 @@ public static class RuntimePreviewGenerator
 		set { m_markTextureNonReadable = value; }
 	}
 
-	public static Texture2D GenerateMaterialPreview( Material material, PrimitiveType previewObject, int width = 64, int height = 64 )
+	public static Texture2D GenerateMaterialPreview( Material material, PrimitiveType previewPrimitive, int width = 64, int height = 64 )
 	{
-		return GenerateMaterialPreviewWithShader( material, previewObject, null, null, width, height );
+		return GenerateMaterialPreviewInternal( material, previewPrimitive, null, null, width, height );
 	}
 
 	public static Texture2D GenerateMaterialPreviewWithShader( Material material, PrimitiveType previewPrimitive, Shader shader, string replacementTag, int width = 64, int height = 64 )
+	{
+		return GenerateMaterialPreviewInternal( material, previewPrimitive, shader, replacementTag, width, height );
+	}
+
+#if UNITY_2018_2_OR_NEWER
+	public static void GenerateMaterialPreviewAsync( Action<Texture2D> callback, Material material, PrimitiveType previewPrimitive, int width = 64, int height = 64 )
+	{
+		GenerateMaterialPreviewInternal( material, previewPrimitive, null, null, width, height, callback );
+	}
+
+	public static void GenerateMaterialPreviewWithShaderAsync( Action<Texture2D> callback, Material material, PrimitiveType previewPrimitive, Shader shader, string replacementTag, int width = 64, int height = 64 )
+	{
+		GenerateMaterialPreviewInternal( material, previewPrimitive, shader, replacementTag, width, height, callback );
+	}
+#endif
+
+#if UNITY_2018_2_OR_NEWER
+	private static Texture2D GenerateMaterialPreviewInternal( Material material, PrimitiveType previewPrimitive, Shader shader, string replacementTag, int width, int height, Action<Texture2D> asyncCallback = null )
+#else
+	private static Texture2D GenerateMaterialPreviewInternal( Material material, PrimitiveType previewPrimitive, Shader shader, string replacementTag, int width, int height )
+#endif
 	{
 		GameObject previewModel = GameObject.CreatePrimitive( previewPrimitive );
 		previewModel.gameObject.hideFlags = HideFlags.HideAndDontSave;
@@ -164,7 +188,11 @@ public static class RuntimePreviewGenerator
 
 		try
 		{
-			return GenerateModelPreviewWithShader( previewModel.transform, shader, replacementTag, width, height, false );
+#if UNITY_2018_2_OR_NEWER
+			return GenerateModelPreviewInternal( previewModel.transform, shader, replacementTag, width, height, false, true, asyncCallback );
+#else
+			return GenerateModelPreviewInternal( previewModel.transform, shader, replacementTag, width, height, false, true );
+#endif
 		}
 		catch( Exception e )
 		{
@@ -180,10 +208,31 @@ public static class RuntimePreviewGenerator
 
 	public static Texture2D GenerateModelPreview( Transform model, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true )
 	{
-		return GenerateModelPreviewWithShader( model, null, null, width, height, shouldCloneModel, shouldIgnoreParticleSystems );
+		return GenerateModelPreviewInternal( model, null, null, width, height, shouldCloneModel, shouldIgnoreParticleSystems );
 	}
 
 	public static Texture2D GenerateModelPreviewWithShader( Transform model, Shader shader, string replacementTag, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true )
+	{
+		return GenerateModelPreviewInternal( model, shader, replacementTag, width, height, shouldCloneModel, shouldIgnoreParticleSystems );
+	}
+
+#if UNITY_2018_2_OR_NEWER
+	public static void GenerateModelPreviewAsync( Action<Texture2D> callback, Transform model, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true )
+	{
+		GenerateModelPreviewInternal( model, null, null, width, height, shouldCloneModel, shouldIgnoreParticleSystems, callback );
+	}
+
+	public static void GenerateModelPreviewWithShaderAsync( Action<Texture2D> callback, Transform model, Shader shader, string replacementTag, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true )
+	{
+		GenerateModelPreviewInternal( model, shader, replacementTag, width, height, shouldCloneModel, shouldIgnoreParticleSystems, callback );
+	}
+#endif
+
+#if UNITY_2018_2_OR_NEWER
+	private static Texture2D GenerateModelPreviewInternal( Transform model, Shader shader, string replacementTag, int width, int height, bool shouldCloneModel, bool shouldIgnoreParticleSystems, Action<Texture2D> asyncCallback = null )
+#else
+	private static Texture2D GenerateModelPreviewInternal( Transform model, Shader shader, string replacementTag, int width, int height, bool shouldCloneModel, bool shouldIgnoreParticleSystems )
+#endif
 	{
 		if( !model )
 			return null;
@@ -211,6 +260,10 @@ public static class RuntimePreviewGenerator
 		bool wasActive = previewObject.gameObject.activeSelf;
 		Vector3 prevPos = previewObject.position;
 		Quaternion prevRot = previewObject.rotation;
+
+#if UNITY_2018_2_OR_NEWER
+		bool asyncOperationStarted = false;
+#endif
 
 #if DEBUG_BOUNDS
 		Transform boundsDebugCube = null;
@@ -302,17 +355,66 @@ public static class RuntimePreviewGenerator
 						}
 					}
 				}
-				
-				result = new Texture2D( width, height, m_backgroundColor.a < 1f ? TextureFormat.RGBA32 : TextureFormat.RGB24, false );
-				result.ReadPixels( new Rect( 0f, 0f, width, height ), 0, 0, false );
-				result.Apply( false, m_markTextureNonReadable );
+
+#if UNITY_2018_2_OR_NEWER
+				if( asyncCallback != null )
+				{
+					AsyncGPUReadback.Request( renderTexture, 0, m_backgroundColor.a < 1f ? TextureFormat.RGBA32 : TextureFormat.RGB24, ( asyncResult ) =>
+					{
+						try
+						{
+							result = new Texture2D( width, height, m_backgroundColor.a < 1f ? TextureFormat.RGBA32 : TextureFormat.RGB24, false );
+							if( !asyncResult.hasError )
+								result.LoadRawTextureData( asyncResult.GetData<byte>() );
+							else
+							{
+								Debug.LogWarning( "Async thumbnail request failed, falling back to conventional method" );
+
+								RenderTexture _activeRT = RenderTexture.active;
+								try
+								{
+									RenderTexture.active = renderTexture;
+									result.ReadPixels( new Rect( 0f, 0f, width, height ), 0, 0, false );
+								}
+								finally
+								{
+									RenderTexture.active = _activeRT;
+								}
+							}
+
+							result.Apply( false, m_markTextureNonReadable );
+							asyncCallback( result );
+						}
+						finally
+						{
+							if( renderTexture )
+								RenderTexture.ReleaseTemporary( renderTexture );
+						}
+					} );
+
+					asyncOperationStarted = true;
+				}
+				else
+#endif
+				{
+					result = new Texture2D( width, height, m_backgroundColor.a < 1f ? TextureFormat.RGBA32 : TextureFormat.RGB24, false );
+					result.ReadPixels( new Rect( 0f, 0f, width, height ), 0, 0, false );
+					result.Apply( false, m_markTextureNonReadable );
+				}
 			}
 			finally
 			{
 				RenderTexture.active = activeRT;
 
 				if( renderTexture )
-					RenderTexture.ReleaseTemporary( renderTexture );
+				{
+#if UNITY_2018_2_OR_NEWER
+					if( asyncCallback == null )
+#endif
+					{
+						RenderTexture.ReleaseTemporary( renderTexture );
+					}
+				}
 			}
 		}
 		catch( Exception e )
@@ -346,6 +448,11 @@ public static class RuntimePreviewGenerator
 			if( renderCamera == m_previewRenderCamera )
 				cameraSetup.ApplySetup( renderCamera );
 		}
+
+#if UNITY_2018_2_OR_NEWER
+		if( !asyncOperationStarted && asyncCallback != null )
+			asyncCallback( null );
+#endif
 
 		return result;
 	}
