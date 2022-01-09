@@ -34,18 +34,22 @@ There are 2 main functions:
 
 ```csharp
 public static Texture2D GenerateMaterialPreview( Material material, PrimitiveType previewObject, int width = 64, int height = 64 );
-public static Texture2D GenerateModelPreview( Transform model, int width = 64, int height = 64, bool shouldCloneModel = false );
+public static Texture2D GenerateModelPreview( Transform model, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true );
 ```
 
 **RuntimePreviewGenerator.GenerateMaterialPreview** function generates thumbnail for a *material* using a primitive object whereas **RuntimePreviewGenerator.GenerateModelPreview** function generates thumbnail for a *GameObject* (can be either a prefab or a scene object).
 
-The **width** and **height** parameters define the size of the thumbnail texture. To guarantee a clear shot from the model in *GenerateModelPreview* function, the model is moved far away from the origin of the world (if it is not static) and then returned to its original position after the thumbnail is generated (this effect won't be visible to any scene cameras). If **shouldCloneModel** parameter in *GenerateModelPreview* function is set to *true*, the model is instantiated (cloned) and the clone is used to create the thumbnail texture. This parameter is automatically set to *true* for prefabs. Unless you absolutely do not want your scene object to be moved, keep it as *false* for increased performance.
+The **width** and **height** parameters define the size of the thumbnail texture. To guarantee a clear shot from the model in *GenerateModelPreview* function, the model is moved far away from the origin of the world (if it is not static) and then returned to its original position after the thumbnail is generated (this effect won't be visible to any scene cameras).
+
+If **shouldCloneModel** parameter in *GenerateModelPreview* function is set to *true*, the model is instantiated (cloned) and the clone is used to create the thumbnail texture. This parameter is automatically set to *true* for prefabs. Unless you absolutely do not want your scene object to be moved, keep it as *false* for increased performance.
+
+When the model has a child *Particle System*, the returned thumbnail may look empty. That's because Particle Systems usually have ridiculously large bounds and the camera needs to zoom out a lot to compensate that. Therefore, by default, Particle Systems are ignored while capturing thumbnails. You can set **shouldIgnoreParticleSystems** to *false* to override this behaviour.
 
 There are also 2 variants for these functions that use **replacement shaders** while rendering the thumbnails (see: https://docs.unity3d.com/Manual/SL-ShaderReplacement.html) (URP and HDRP aren't supported). These functions are:
 
 ```csharp
 public static Texture2D GenerateMaterialPreviewWithShader( Material material, PrimitiveType previewPrimitive, Shader shader, string replacementTag, int width = 64, int height = 64 );
-public static Texture2D GenerateModelPreviewWithShader( Transform model, Shader shader, string replacementTag, int width = 64, int height = 64, bool shouldCloneModel = false );
+public static Texture2D GenerateModelPreviewWithShader( Transform model, Shader shader, string replacementTag, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true );
 ```
 
 There are a few options to customize the generated thumbnails:

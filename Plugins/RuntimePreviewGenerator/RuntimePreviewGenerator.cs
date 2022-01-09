@@ -171,12 +171,12 @@ public static class RuntimePreviewGenerator
 		return null;
 	}
 
-	public static Texture2D GenerateModelPreview( Transform model, int width = 64, int height = 64, bool shouldCloneModel = false )
+	public static Texture2D GenerateModelPreview( Transform model, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true )
 	{
-		return GenerateModelPreviewWithShader( model, null, null, width, height, shouldCloneModel );
+		return GenerateModelPreviewWithShader( model, null, null, width, height, shouldCloneModel, shouldIgnoreParticleSystems );
 	}
 
-	public static Texture2D GenerateModelPreviewWithShader( Transform model, Shader shader, string replacementTag, int width = 64, int height = 64, bool shouldCloneModel = false )
+	public static Texture2D GenerateModelPreviewWithShader( Transform model, Shader shader, string replacementTag, int width = 64, int height = 64, bool shouldCloneModel = false, bool shouldIgnoreParticleSystems = true )
 	{
 		if( !model )
 			return null;
@@ -224,7 +224,7 @@ public static class RuntimePreviewGenerator
 				previewObject.gameObject.SetActive( true );
 
 			Bounds previewBounds = new Bounds();
-			if( !CalculateBounds( previewObject, out previewBounds ) )
+			if( !CalculateBounds( previewObject, shouldIgnoreParticleSystems, out previewBounds ) )
 				return null;
 
 #if DEBUG_BOUNDS
@@ -319,7 +319,7 @@ public static class RuntimePreviewGenerator
 	}
 
 	// Calculates AABB bounds of the target object (AABB will include its child objects)
-	public static bool CalculateBounds( Transform target, out Bounds bounds )
+	public static bool CalculateBounds( Transform target, bool shouldIgnoreParticleSystems, out Bounds bounds )
 	{
 		renderersList.Clear();
 		target.GetComponentsInChildren( renderersList );
@@ -329,6 +329,9 @@ public static class RuntimePreviewGenerator
 		for( int i = 0; i < renderersList.Count; i++ )
 		{
 			if( !renderersList[i].enabled )
+				continue;
+
+			if( shouldIgnoreParticleSystems && renderersList[i] is ParticleSystemRenderer )
 				continue;
 
 			if( !hasBounds )
