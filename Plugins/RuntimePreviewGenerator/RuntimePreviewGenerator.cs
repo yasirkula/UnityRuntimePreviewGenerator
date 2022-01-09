@@ -137,6 +137,13 @@ public static class RuntimePreviewGenerator
 		set { m_orthographicMode = value; }
 	}
 
+	private static float m_renderSupersampling = 1f;
+	public static float RenderSupersampling
+	{
+		get { return m_renderSupersampling; }
+		set { m_renderSupersampling = Mathf.Max( value, 0.1f ); }
+	}
+
 	private static bool m_markTextureNonReadable = true;
 	public static bool MarkTextureNonReadable
 	{
@@ -257,7 +264,10 @@ public static class RuntimePreviewGenerator
 			RenderTexture renderTexture = null;
 			try
 			{
-				renderTexture = RenderTexture.GetTemporary( width, height, 16 );
+				int supersampledWidth = Mathf.RoundToInt( width * m_renderSupersampling );
+				int supersampledHeight = Mathf.RoundToInt( height * m_renderSupersampling );
+
+				renderTexture = RenderTexture.GetTemporary( supersampledWidth, supersampledHeight, 16 );
 				RenderTexture.active = renderTexture;
 				if( m_backgroundColor.a < 1f )
 					GL.Clear( true, true, m_backgroundColor );
@@ -271,6 +281,28 @@ public static class RuntimePreviewGenerator
 
 				renderCamera.targetTexture = null;
 
+				if( supersampledWidth != width || supersampledHeight != height )
+				{
+					RenderTexture _renderTexture = null;
+					try
+					{
+						_renderTexture = RenderTexture.GetTemporary( width, height, 16 );
+						RenderTexture.active = _renderTexture;
+						if( m_backgroundColor.a < 1f )
+							GL.Clear( true, true, m_backgroundColor );
+
+						Graphics.Blit( renderTexture, _renderTexture );
+					}
+					finally
+					{
+						if( _renderTexture )
+						{
+							RenderTexture.ReleaseTemporary( renderTexture );
+							renderTexture = _renderTexture;
+						}
+					}
+				}
+				
 				result = new Texture2D( width, height, m_backgroundColor.a < 1f ? TextureFormat.RGBA32 : TextureFormat.RGB24, false );
 				result.ReadPixels( new Rect( 0f, 0f, width, height ), 0, 0, false );
 				result.Apply( false, m_markTextureNonReadable );

@@ -23,4 +23,5 @@ To customize the preview texture, use the following properties (before calling t
 - RuntimePreviewGenerator.Padding : float
 - RuntimePreviewGenerator.BackgroundColor : Color
 - RuntimePreviewGenerator.OrthographicMode : bool
+- RuntimePreviewGenerator.RenderSupersampling : float
 - RuntimePreviewGenerator.MarkTextureNonReadable : bool
