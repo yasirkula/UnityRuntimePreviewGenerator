@@ -79,4 +79,12 @@ Here are two example thumbnails, one with perspective projection and grey backgr
 
 **DEBUG_BOUNDS Mode**: the location of the preview render camera is calculated using the Renderer bounds of the target object. If you want, you can uncomment the first line of the *RuntimePreviewGenerator* script to see the bounds in the preview Textures
 
-Well, that's it, I guess. Enjoy!
+## FAQ
+
+- **Rendered thumbnail is empty, why?**
+
+If *shouldIgnoreParticleSystems* parameter is set to *false*, child particle systems of the model may force the camera to zoom out a lot. Or, on SRPs, your *Forward Renderer* asset's *Opaque Layer Mask* and/or *Transparent Layer Mask* might be excluding [layer 22](https://github.com/yasirkula/UnityRuntimePreviewGenerator/blob/33879284ba1340ff9da9e43ea32dbe9f83b7047b/Plugins/RuntimePreviewGenerator/RuntimePreviewGenerator.cs#L75) (preview objects are temporarily assigned to this layer).
+
+- **Rendered thumbnail doesn't look correct, why?**
+
+If there are lighting issues and you're generating thumbnails in *Awake*, try *Start* instead. Otherwise, try disabling post-processing effects and see if it makes any difference. If it does, then you should temporarily disable post-processing while capturing thumbnails.
