@@ -1,7 +1,7 @@
 {
   "name": "com.yasirkula.runtimepreviewgenerator",
   "displayName": "Runtime Preview Generator",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "documentationUrl": "https://github.com/yasirkula/UnityRuntimePreviewGenerator",
   "changelogUrl": "https://github.com/yasirkula/UnityRuntimePreviewGenerator/releases",
   "licensesUrl": "https://github.com/yasirkula/UnityRuntimePreviewGenerator/blob/master/LICENSE.txt",

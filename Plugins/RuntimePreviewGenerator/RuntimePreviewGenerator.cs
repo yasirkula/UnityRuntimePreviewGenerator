@@ -639,7 +639,7 @@ public static class RuntimePreviewGenerator
 
 			renderCamera = m_previewRenderCamera;
 			renderCamera.nearClipPlane = 0.01f;
-			renderCamera.cullingMask = PREVIEW_LAYER;
+			renderCamera.cullingMask = 1 << PREVIEW_LAYER;
 		}
 		else
 			renderCamera = InternalCamera;
