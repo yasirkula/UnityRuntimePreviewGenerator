@@ -235,7 +235,14 @@ public static class RuntimePreviewGenerator
 #endif
 	{
 		if( !model )
+		{
+#if UNITY_2018_2_OR_NEWER
+			if( asyncCallback != null )
+				asyncCallback( null );
+#endif
+
 			return null;
+		}
 
 		Texture2D result = null;
 
@@ -285,7 +292,14 @@ public static class RuntimePreviewGenerator
 
 			Bounds previewBounds = new Bounds();
 			if( !CalculateBounds( previewObject, shouldIgnoreParticleSystems, out previewBounds ) )
+			{
+#if UNITY_2018_2_OR_NEWER
+				if( asyncCallback != null )
+					asyncCallback( null );
+#endif
+
 				return null;
+			}
 
 #if DEBUG_BOUNDS
 			if( !boundsDebugMaterial )
@@ -409,7 +423,7 @@ public static class RuntimePreviewGenerator
 				if( renderTexture )
 				{
 #if UNITY_2018_2_OR_NEWER
-					if( asyncCallback == null )
+					if( !asyncOperationStarted )
 #endif
 					{
 						RenderTexture.ReleaseTemporary( renderTexture );
