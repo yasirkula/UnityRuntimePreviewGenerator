@@ -79,6 +79,7 @@ public static class RuntimePreviewGenerator
 	private static readonly CameraSetup cameraSetup = new CameraSetup();
 
 	private static readonly Vector3[] boundingBoxPoints = new Vector3[8];
+	private static readonly Vector3[] localBoundsMinMax = new Vector3[2];
 
 	private static readonly List<Renderer> renderersList = new List<Renderer>( 64 );
 	private static readonly List<int> layersList = new List<int>( 64 );
@@ -138,6 +139,13 @@ public static class RuntimePreviewGenerator
 	{
 		get { return m_orthographicMode; }
 		set { m_orthographicMode = value; }
+	}
+
+	private static bool m_useLocalBounds = false;
+	public static bool UseLocalBounds
+	{
+		get { return m_useLocalBounds; }
+		set { m_useLocalBounds = value; }
 	}
 
 	private static float m_renderSupersampling = 1f;
@@ -290,8 +298,9 @@ public static class RuntimePreviewGenerator
 			if( !wasActive )
 				previewObject.gameObject.SetActive( true );
 
+			Quaternion cameraRotation = Quaternion.LookRotation( previewObject.rotation * m_previewDirection, previewObject.up );
 			Bounds previewBounds = new Bounds();
-			if( !CalculateBounds( previewObject, shouldIgnoreParticleSystems, out previewBounds ) )
+			if( !CalculateBounds( previewObject, shouldIgnoreParticleSystems, cameraRotation, out previewBounds ) )
 			{
 #if UNITY_2018_2_OR_NEWER
 				if( asyncCallback != null )
@@ -313,6 +322,7 @@ public static class RuntimePreviewGenerator
 
 			boundsDebugCube = GameObject.CreatePrimitive( PrimitiveType.Cube ).transform;
 			boundsDebugCube.localPosition = previewBounds.center;
+			boundsDebugCube.localRotation = m_useLocalBounds ? cameraRotation : Quaternion.identity;
 			boundsDebugCube.localScale = previewBounds.size;
 			boundsDebugCube.gameObject.layer = PREVIEW_LAYER;
 			boundsDebugCube.gameObject.hideFlags = HideFlags.HideAndDontSave;
@@ -321,11 +331,11 @@ public static class RuntimePreviewGenerator
 #endif
 
 			renderCamera.aspect = (float) width / height;
-			renderCamera.transform.rotation = Quaternion.LookRotation( previewObject.rotation * m_previewDirection, previewObject.up );
+			renderCamera.transform.rotation = cameraRotation;
 
 			CalculateCameraPosition( renderCamera, previewBounds, m_padding );
 
-			renderCamera.farClipPlane = ( renderCamera.transform.position - previewBounds.center ).magnitude + previewBounds.size.magnitude;
+			renderCamera.farClipPlane = ( renderCamera.transform.position - previewBounds.center ).magnitude + ( m_useLocalBounds ? ( previewBounds.extents.z * 1.01f ) : previewBounds.size.magnitude );
 
 			RenderTexture activeRT = RenderTexture.active;
 			RenderTexture renderTexture = null;
@@ -472,10 +482,14 @@ public static class RuntimePreviewGenerator
 	}
 
 	// Calculates AABB bounds of the target object (AABB will include its child objects)
-	public static bool CalculateBounds( Transform target, bool shouldIgnoreParticleSystems, out Bounds bounds )
+	public static bool CalculateBounds( Transform target, bool shouldIgnoreParticleSystems, Quaternion cameraRotation, out Bounds bounds )
 	{
 		renderersList.Clear();
 		target.GetComponentsInChildren( renderersList );
+
+		Quaternion inverseCameraRotation = Quaternion.Inverse( cameraRotation );
+		Vector3 localBoundsMin = new Vector3( float.MaxValue - 1f, float.MaxValue - 1f, float.MaxValue - 1f );
+		Vector3 localBoundsMax = new Vector3( float.MinValue + 1f, float.MinValue + 1f, float.MinValue + 1f );
 
 		bounds = new Bounds();
 		bool hasBounds = false;
@@ -487,7 +501,39 @@ public static class RuntimePreviewGenerator
 			if( shouldIgnoreParticleSystems && renderersList[i] is ParticleSystemRenderer )
 				continue;
 
-			if( !hasBounds )
+			// Local bounds calculation code taken from: https://github.com/Unity-Technologies/UnityCsReference/blob/0355e09029fa1212b7f2e821f41565df8e8814c7/Editor/Mono/InternalEditorUtility.bindings.cs#L710
+			if( m_useLocalBounds )
+			{
+#if UNITY_2021_2_OR_NEWER
+				Bounds localBounds = renderersList[i].localBounds;
+#else
+				MeshFilter meshFilter = renderersList[i].GetComponent<MeshFilter>();
+				if( !meshFilter || !meshFilter.sharedMesh )
+					continue;
+
+				Bounds localBounds = meshFilter.sharedMesh.bounds;
+#endif
+
+				Transform transform = renderersList[i].transform;
+				localBoundsMinMax[0] = localBounds.min;
+				localBoundsMinMax[1] = localBounds.max;
+
+				for( int x = 0; x < 2; x++ )
+				{
+					for( int y = 0; y < 2; y++ )
+					{
+						for( int z = 0; z < 2; z++ )
+						{
+							Vector3 point = inverseCameraRotation * transform.TransformPoint( new Vector3( localBoundsMinMax[x].x, localBoundsMinMax[y].y, localBoundsMinMax[z].z ) );
+							localBoundsMin = Vector3.Min( localBoundsMin, point );
+							localBoundsMax = Vector3.Max( localBoundsMax, point );
+						}
+					}
+				}
+
+				hasBounds = true;
+			}
+			else if( !hasBounds )
 			{
 				bounds = renderersList[i].bounds;
 				hasBounds = true;
@@ -495,6 +541,9 @@ public static class RuntimePreviewGenerator
 			else
 				bounds.Encapsulate( renderersList[i].bounds );
 		}
+
+		if( m_useLocalBounds && hasBounds )
+			bounds = new Bounds( cameraRotation * ( ( localBoundsMin + localBoundsMax ) * 0.5f ), localBoundsMax - localBoundsMin );
 
 		return hasBounds;
 	}
@@ -515,22 +564,45 @@ public static class RuntimePreviewGenerator
 		Vector3 boundsSize = 2f * boundsExtents;
 
 		// Calculate corner points of the Bounds
-		Vector3 point = boundsCenter + boundsExtents;
-		boundingBoxPoints[0] = point;
-		point.x -= boundsSize.x;
-		boundingBoxPoints[1] = point;
-		point.y -= boundsSize.y;
-		boundingBoxPoints[2] = point;
-		point.x += boundsSize.x;
-		boundingBoxPoints[3] = point;
-		point.z -= boundsSize.z;
-		boundingBoxPoints[4] = point;
-		point.x -= boundsSize.x;
-		boundingBoxPoints[5] = point;
-		point.y += boundsSize.y;
-		boundingBoxPoints[6] = point;
-		point.x += boundsSize.x;
-		boundingBoxPoints[7] = point;
+		if( m_useLocalBounds )
+		{
+			Matrix4x4 localBoundsMatrix = Matrix4x4.TRS( boundsCenter, camera.transform.rotation, Vector3.one );
+			Vector3 point = boundsExtents;
+			boundingBoxPoints[0] = localBoundsMatrix.MultiplyPoint3x4( point );
+			point.x -= boundsSize.x;
+			boundingBoxPoints[1] = localBoundsMatrix.MultiplyPoint3x4( point );
+			point.y -= boundsSize.y;
+			boundingBoxPoints[2] = localBoundsMatrix.MultiplyPoint3x4( point );
+			point.x += boundsSize.x;
+			boundingBoxPoints[3] = localBoundsMatrix.MultiplyPoint3x4( point );
+			point.z -= boundsSize.z;
+			boundingBoxPoints[4] = localBoundsMatrix.MultiplyPoint3x4( point );
+			point.x -= boundsSize.x;
+			boundingBoxPoints[5] = localBoundsMatrix.MultiplyPoint3x4( point );
+			point.y += boundsSize.y;
+			boundingBoxPoints[6] = localBoundsMatrix.MultiplyPoint3x4( point );
+			point.x += boundsSize.x;
+			boundingBoxPoints[7] = localBoundsMatrix.MultiplyPoint3x4( point );
+		}
+		else
+		{
+			Vector3 point = boundsCenter + boundsExtents;
+			boundingBoxPoints[0] = point;
+			point.x -= boundsSize.x;
+			boundingBoxPoints[1] = point;
+			point.y -= boundsSize.y;
+			boundingBoxPoints[2] = point;
+			point.x += boundsSize.x;
+			boundingBoxPoints[3] = point;
+			point.z -= boundsSize.z;
+			boundingBoxPoints[4] = point;
+			point.x -= boundsSize.x;
+			boundingBoxPoints[5] = point;
+			point.y += boundsSize.y;
+			boundingBoxPoints[6] = point;
+			point.x += boundsSize.x;
+			boundingBoxPoints[7] = point;
+		}
 
 		if( camera.orthographic )
 		{

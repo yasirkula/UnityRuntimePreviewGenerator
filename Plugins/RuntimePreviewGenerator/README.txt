@@ -1,10 +1,12 @@
-= Runtime Preview Generator =
+= Runtime Preview Generator (v1.1.3) =
 
 Online documentation available at: https://github.com/yasirkula/UnityRuntimePreviewGenerator
 E-mail: yasirkula@gmail.com
 
+
 1. ABOUT
 This plugin helps you generate preview textures (thumbnails) for your GameObject's or materials on the fly.
+
 
 2. HOW TO
 Simply call the following functions to generate thumbnails for your GameObject's or materials:
@@ -28,5 +30,6 @@ To customize the preview texture, use the following properties (before calling t
 - RuntimePreviewGenerator.Padding : float
 - RuntimePreviewGenerator.BackgroundColor : Color
 - RuntimePreviewGenerator.OrthographicMode : bool
+- RuntimePreviewGenerator.UseLocalBounds : bool
 - RuntimePreviewGenerator.RenderSupersampling : float
 - RuntimePreviewGenerator.MarkTextureNonReadable : bool
